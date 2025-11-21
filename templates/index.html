@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Biodegradable Material Classifier</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            text-align: center;
+        }
+        .upload-section {
+            margin: 20px 0;
+        }
+        .result-section {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            display: none;
+        }
+        .success {
+            background-color: #e8f5e9;
+            color: #2e7d32;
+        }
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Biodegradable Material Classifier</h1>
+        <div class="upload-section">
+            <input type="file" id="imageInput" accept="image/*" multiple>
+            <button onclick="classifyImages()">Classify Images</button>
+        </div>
+        <div id="resultSection" class="result-section"></div>
+    </div>
+
+    <script>
+        async function classifyImages() {
+            const files = document.getElementById('imageInput').files;
+            const resultSection = document.getElementById('resultSection');
+            resultSection.innerHTML = '';
+            resultSection.style.display = 'block';
+
+            for (let file of files) {
+                const formData = new FormData();
+                formData.append('image', file);
+
+                try {
+                    const response = await fetch('/api/classify', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+                    if (result.error) {
+                        resultSection.innerHTML += `<div class="error">Error: ${result.error}</div>`;
+                    } else {
+                        resultSection.innerHTML += `
+                            <div class="success">
+                                <strong>${file.name}</strong><br>
+                                Prediction: ${result.prediction}<br>
+                                Confidence: ${(result.confidence * 100).toFixed(2)}%
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    resultSection.innerHTML += `<div class="error">Error: ${error.message}</div>`;
+                }
+            }
+        }
+    </script>
+</body>
+</html>

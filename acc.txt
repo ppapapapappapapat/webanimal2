@@ -1,0 +1,11 @@
+Demo Accounts:
+
+Admin: admin@animalcare.com / admin123456
+
+User: user@animalcare.com / user123456
+
+Demo accounts:
+
+Email: john@example.com | Password: password
+
+Email: sarah@example.com | Password: password

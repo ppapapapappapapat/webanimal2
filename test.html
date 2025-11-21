@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Connection</title>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <h1>Test Connection</h1>
+    <div id="status"></div>
+    <button onclick="testConnection()">Test Connection</button>
+    <script>
+        async function testConnection() {
+            try {
+                const response = await axios.get('http://localhost:5000/api/test');
+                document.getElementById('status').innerHTML = 
+                    `<div style="color: green;">${response.data.message}</div>`;
+            } catch (error) {
+                document.getElementById('status').innerHTML = 
+                    `<div style="color: red;">Error: ${error.message}</div>`;
+            }
+        }
+    </script>
+</body>
+</html>

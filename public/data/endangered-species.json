@@ -1,0 +1,102 @@
+[
+  {
+    "id": 1,
+    "name": "Amur Leopard",
+    "scientificName": "Panthera pardus orientalis",
+    "status": "Critically Endangered",
+    "population": "Less than 100 individuals",
+    "habitat": "Temperate forests of Russia and China",
+    "threats": ["Poaching", "Habitat loss", "Human conflict"],
+    "image": "/images/endangered/Amur leopard.jpg"
+  },
+  {
+    "id": 2,
+    "name": "Vaquita",
+    "scientificName": "Phocoena sinus",
+    "status": "Critically Endangered",
+    "population": "Less than 10 individuals",
+    "habitat": "Gulf of California",
+    "threats": ["Illegal fishing", "Bycatch in gillnets"],
+    "image": "/images/endangered/Vaquita.jpeg"
+  },
+  {
+    "id": 3,
+    "name": "Javan Rhino",
+    "scientificName": "Rhinoceros sondaicus",
+    "status": "Critically Endangered",
+    "population": "Around 70 individuals",
+    "habitat": "Tropical forests of Indonesia",
+    "threats": ["Poaching", "Habitat loss", "Small population size"],
+    "image": "/images/endangered/Javan Rhino.jpg"
+  },
+  {
+    "id": 4,
+    "name": "Bengal Tiger",
+    "scientificName": "Panthera tigris tigris",
+    "status": "Endangered",
+    "population": "Fewer than 2,500 individuals",
+    "habitat": "Forests and grasslands of India, Bangladesh, Nepal, and Bhutan",
+    "threats": ["Poaching", "Habitat loss", "Human conflict"],
+    "image": "/images/endangered/Bengal Tiger.jpg"
+  },
+  {
+    "id": 5,
+    "name": "Giant Panda",
+    "scientificName": "Ailuropoda melanoleuca",
+    "status": "Vulnerable",
+    "population": "Around 1,900 individuals",
+    "habitat": "Bamboo forests of central China",
+    "threats": ["Habitat loss", "Low reproduction rate", "Climate change"],
+    "image": "/images/endangered/Giant Panda.jpg"
+  },
+  {
+    "id": 6,
+    "name": "Black Rhino",
+    "scientificName": "Diceros bicornis",
+    "status": "Critically Endangered",
+    "population": "Around 5,000 individuals",
+    "habitat": "Grasslands and savannas of Africa",
+    "threats": ["Poaching", "Habitat loss"],
+    "image": "/images/endangered/Black Rhino.jpg"
+  },
+  {
+    "id": 7,
+    "name": "Hawksbill Turtle",
+    "scientificName": "Eretmochelys imbricata",
+    "status": "Critically Endangered",
+    "population": "Unknown but declining",
+    "habitat": "Tropical oceans",
+    "threats": ["Wildlife trade", "Habitat destruction", "Climate change"],
+    "image": "/images/endangered/Hawksbill Turtle.png"
+  },
+  {
+    "id": 8,
+    "name": "Asian Elephant",
+    "scientificName": "Elephas maximus",
+    "status": "Endangered",
+    "population": "Fewer than 50,000 individuals",
+    "habitat": "Forests and grasslands of Southeast Asia",
+    "threats": ["Habitat loss", "Human conflict", "Poaching"],
+    "image": "/images/endangered/Asian Elephant.jpg"
+  },
+  {
+    "id": 9,
+    "name": "Orangutan",
+    "scientificName": "Pongo",
+    "status": "Critically Endangered",
+    "population": "Around 100,000 individuals",
+    "habitat": "Tropical rainforests of Indonesia and Malaysia",
+    "threats": ["Deforestation", "Hunting", "Pet trade"],
+    "image": "/images/endangered/Orangutan.jpg"
+  },
+  {
+    "id": 10,
+    "name": "Blue Whale",
+    "scientificName": "Balaenoptera musculus",
+    "status": "Endangered",
+    "population": "10,000-25,000 individuals",
+    "habitat": "Oceans worldwide",
+    "threats": ["Ship strikes", "Climate change", "Pollution"],
+    "image": "/images/endangered/Blue Whale.jpg"
+  }
+] 

@@ -1,0 +1,10 @@
+{
+  "format": "graph-model",
+  "modelTopology": {
+    "node": [],
+    "versions": {
+      "producer": "1.0.0"
+    }
+  },
+  "weightsManifest": []
+} 
