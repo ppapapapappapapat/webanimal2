@@ -4,8 +4,8 @@ import { useState, useEffect } from 'react';
 import { useUser } from '../../context/UserContext';
 import AdminLayout from '../../components/admin/AdminLayout';
 
-// ✅ FIXED: Use environment variable with fallback
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.100.77:5000";
+//const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://192.168.100.77:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://10.82.64.38:3001";
 
 interface User {
   id: number;
@@ -47,6 +47,7 @@ export default function UserManagement() {
     password: ''
   });
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -163,38 +164,119 @@ export default function UserManagement() {
   };
 
   const handleSubmitEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingUser) return;
+  e.preventDefault();
+  if (!editingUser) return;
 
-    try {
-      console.log('🔄 Updating user:', editingUser.id);
-      const response = await fetch(`${API_URL}/api/admin/users/${editingUser.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: formData.username,
-          email: formData.email,
-          role: formData.role,
-          ...(formData.password && { password: formData.password })
-        }),
-      });
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'User updated successfully' });
-        setShowEditModal(false);
-        setEditingUser(null);
-        fetchUsers(); // Refresh the list
-      } else {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to update user' }));
-        setMessage({ type: 'error', text: errorData.error || 'Failed to update user' });
-      }
-    } catch (error) {
-      console.error('❌ Error updating user:', error);
-      setMessage({ type: 'error', text: 'Network error updating user. Please try again.' });
+  try {
+    setUpdating(true);
+    console.log('🔄 Updating user:', editingUser.id);
+    
+    // Prepare update data - include is_active to maintain current status
+    const updateData: any = {
+      username: formData.username,
+      email: formData.email,
+      role: formData.role,
+      is_active: editingUser.is_active // Include current active status
+    };
+    
+    // Only include password if provided and not empty
+    if (formData.password && formData.password.trim() !== '') {
+      updateData.password = formData.password;
     }
-  };
+
+    console.log('📤 Sending update data:', updateData);
+    console.log('🔗 Full API URL:', `${API_URL}/api/admin/users/${editingUser.id}`);
+
+    // Test the connection with a health check instead of GET to user endpoint
+    console.log('🧪 Testing backend connection...');
+    const healthCheck = await fetch(`${API_URL}/health`);
+    console.log('🔍 Health check status:', healthCheck.status);
+    
+    if (healthCheck.ok) {
+      console.log('✅ Backend is running and accessible');
+    }
+
+    // Try PUT method first (more widely supported)
+    console.log('🔄 Trying PUT method...');
+    const putResponse = await fetch(`${API_URL}/api/admin/users/${editingUser.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updateData),
+    });
+
+    console.log('📡 PUT Response status:', putResponse.status);
+    console.log('📡 PUT Response ok:', putResponse.ok);
+
+    if (putResponse.ok) {
+      const result = await putResponse.json();
+      console.log('✅ User updated successfully with PUT:', result);
+      
+      setMessage({ type: 'success', text: 'User updated successfully' });
+      setShowEditModal(false);
+      setEditingUser(null);
+      setFormData({ username: '', email: '', role: 'user', password: '' });
+      fetchUsers(); // Refresh the list
+      return;
+    }
+
+    // If PUT failed, try PATCH
+    console.log('🔄 PUT failed, trying PATCH method...');
+    const patchResponse = await fetch(`${API_URL}/api/admin/users/${editingUser.id}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(updateData),
+    });
+
+    console.log('📡 PATCH Response status:', patchResponse.status);
+    console.log('📡 PATCH Response ok:', patchResponse.ok);
+
+    if (patchResponse.ok) {
+      const result = await patchResponse.json();
+      console.log('✅ User updated successfully with PATCH:', result);
+      
+      setMessage({ type: 'success', text: 'User updated successfully' });
+      setShowEditModal(false);
+      setEditingUser(null);
+      setFormData({ username: '', email: '', role: 'user', password: '' });
+      fetchUsers();
+      return;
+    }
+
+    // If both methods failed, show detailed error
+    let errorMessage = `Server error: ${putResponse.status} - ${putResponse.statusText}`;
+    
+    try {
+      const errorText = await putResponse.text();
+      console.error('❌ Server error response:', errorText);
+      
+      if (errorText) {
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          errorMessage = errorText || errorMessage;
+        }
+      }
+    } catch (textError) {
+      console.error('❌ Could not read error response:', textError);
+    }
+    
+    setMessage({ type: 'error', text: errorMessage });
+
+  } catch (error) {
+    console.error('❌ Network error updating user:', error);
+    setMessage({ 
+      type: 'error', 
+      text: `Network error: ${error instanceof Error ? error.message : 'Cannot connect to server'}. Please check if the backend is running.` 
+    });
+  } finally {
+    setUpdating(false);
+  }
+};
 
   const handleSubmitCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -205,6 +287,7 @@ export default function UserManagement() {
     }
 
     try {
+      setUpdating(true);
       console.log('🔄 Creating new user');
       const response = await fetch(`${API_URL}/api/admin/users`, {
         method: 'POST',
@@ -216,56 +299,34 @@ export default function UserManagement() {
           email: formData.email,
           role: formData.role,
           password: formData.password,
-          is_active: true // Default to active when creating new user
+          is_active: true
         }),
       });
 
       if (response.ok) {
         setMessage({ type: 'success', text: 'User created successfully' });
         setShowCreateModal(false);
-        fetchUsers(); // Refresh the list
+        setFormData({ username: '', email: '', role: 'user', password: '' });
+        fetchUsers();
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Failed to create user' }));
         setMessage({ type: 'error', text: errorData.error || 'Failed to create user' });
       }
     } catch (error) {
       console.error('❌ Error creating user:', error);
-      setMessage({ type: 'error', text: 'Network error creating user. Please try again.' });
-    }
-  };
-
-  const handleToggleStatus = async (userId: number, currentStatus: boolean) => {
-    try {
-      console.log('🔄 Toggling user status:', userId);
-      const response = await fetch(`${API_URL}/api/admin/users/${userId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          is_active: !currentStatus
-        }),
-      });
-
-      if (response.ok) {
-        setMessage({ type: 'success', text: `User ${!currentStatus ? 'activated' : 'deactivated'} successfully` });
-        fetchUsers(); // Refresh the list
-      } else {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to update user status' }));
-        setMessage({ type: 'error', text: errorData.error || 'Failed to update user status' });
-      }
-    } catch (error) {
-      console.error('❌ Error updating user status:', error);
-      setMessage({ type: 'error', text: 'Network error updating user status. Please try again.' });
+      setMessage({ type: 'error', text: 'Network error creating user. Please check if the backend is running.' });
+    } finally {
+      setUpdating(false);
     }
   };
 
   const handleDeleteUser = async (userId: number) => {
-    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
+    if (!confirm('Are you sure you want to delete this user? This will also delete all their sightings and reports. This action cannot be undone.')) {
       return;
     }
 
     try {
+      setUpdating(true);
       console.log('🔄 Deleting user:', userId);
       const response = await fetch(`${API_URL}/api/admin/users/${userId}`, {
         method: 'DELETE',
@@ -273,14 +334,16 @@ export default function UserManagement() {
 
       if (response.ok) {
         setMessage({ type: 'success', text: 'User deleted successfully' });
-        fetchUsers(); // Refresh the list
+        fetchUsers();
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Failed to delete user' }));
         setMessage({ type: 'error', text: errorData.error || 'Failed to delete user' });
       }
     } catch (error) {
       console.error('❌ Error deleting user:', error);
-      setMessage({ type: 'error', text: 'Network error deleting user. Please try again.' });
+      setMessage({ type: 'error', text: 'Network error deleting user. Please check if the backend is running.' });
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -314,6 +377,26 @@ export default function UserManagement() {
     return userId === Number(currentUser.id);
   };
 
+  // Test backend connection
+  const testBackendConnection = async () => {
+    try {
+      console.log('🧪 Testing backend connection...');
+      const response = await fetch(`${API_URL}/api/admin/users`, {
+        method: 'GET',
+      });
+      console.log('🔗 Backend connection test result:', {
+        status: response.status,
+        statusText: response.statusText,
+        ok: response.ok,
+        url: `${API_URL}/api/admin/users`
+      });
+      return response.ok;
+    } catch (error) {
+      console.error('❌ Backend connection test failed:', error);
+      return false;
+    }
+  };
+
   if (loading) {
     return (
       <AdminLayout>
@@ -334,6 +417,25 @@ export default function UserManagement() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
           <p className="text-gray-600 mt-2">Manage user accounts, roles, and permissions</p>
+        </div>
+
+        {/* Debug Button - Remove after fixing */}
+        <div className="mb-4 p-4 bg-yellow-100 border border-yellow-400 rounded-lg">
+          <p className="text-yellow-800 mb-2">Debug Information:</p>
+          <p className="text-yellow-800 text-sm">API_URL: {API_URL}</p>
+          <p className="text-yellow-800 text-sm">Total Users: {users.length}</p>
+          <button
+            onClick={testBackendConnection}
+            className="mt-2 px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+          >
+            Test Backend Connection
+          </button>
+          <button
+            onClick={fetchUsers}
+            className="mt-2 ml-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          >
+            Refresh Users
+          </button>
         </div>
 
         {/* Stats Cards */}
@@ -512,20 +614,14 @@ export default function UserManagement() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleEditUser(user)}
-                            className="text-blue-600 hover:text-blue-900 transition-colors"
+                            className="text-blue-600 hover:text-blue-900 transition-colors px-2 py-1 rounded hover:bg-blue-50"
                           >
                             Edit
-                          </button>
-                          <button
-                            onClick={() => handleToggleStatus(user.id, user.is_active)}
-                            className={user.is_active ? "text-orange-600 hover:text-orange-900 transition-colors" : "text-green-600 hover:text-green-900 transition-colors"}
-                          >
-                            {user.is_active ? 'Deactivate' : 'Activate'}
                           </button>
                           {!isCurrentUser(user.id) && (
                             <button
                               onClick={() => handleDeleteUser(user.id)}
-                              className="text-red-600 hover:text-red-900 transition-colors"
+                              className="text-red-600 hover:text-red-900 transition-colors px-2 py-1 rounded hover:bg-red-50"
                             >
                               Delete
                             </button>
@@ -595,19 +691,28 @@ export default function UserManagement() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter new password"
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Only enter a password if you want to change it
+                    </p>
                   </div>
                 </div>
                 <div className="flex gap-3 mt-6">
                   <button
                     type="submit"
-                    className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors font-medium"
+                    disabled={updating}
+                    className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Update User
+                    {updating ? 'Updating...' : 'Update User'}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowEditModal(false)}
-                    className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors font-medium"
+                    onClick={() => {
+                      setShowEditModal(false);
+                      setEditingUser(null);
+                      setFormData({ username: '', email: '', role: 'user', password: '' });
+                    }}
+                    disabled={updating}
+                    className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors font-medium disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -677,14 +782,19 @@ export default function UserManagement() {
                 <div className="flex gap-3 mt-6">
                   <button
                     type="submit"
-                    className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors font-medium"
+                    disabled={updating}
+                    className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Create User
+                    {updating ? 'Creating...' : 'Create User'}
                   </button>
                   <button
                     type="button"
-                    onClick={() => setShowCreateModal(false)}
-                    className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors font-medium"
+                    onClick={() => {
+                      setShowCreateModal(false);
+                      setFormData({ username: '', email: '', role: 'user', password: '' });
+                    }}
+                    disabled={updating}
+                    className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition-colors font-medium disabled:opacity-50"
                   >
                     Cancel
                   </button>
