@@ -1,0 +1,11 @@
+[build]
+builder = "nixpacks"
+buildCommand = "echo 'Python backend - skipping Node.js build'"
+
+[deploy]
+startCommand = "cd backend && python main.py"
+
+[environments]
+  [environments.production]
+    [environments.production.variables]
+      PORT = "5000"
