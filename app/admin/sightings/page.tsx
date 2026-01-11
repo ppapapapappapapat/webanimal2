@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import AdminLayout from '../../components/admin/AdminLayout';
 
 // ✅ FIXED: Use consistent API URL for all devices
-const API_URL = "http://192.168.100.77:5000";
+const API_URL = "http://10.82.64.38:3001";
+//const API_URL = "http://192.168.100.77:3001";
 
 interface Sighting {
   id: number;
@@ -118,93 +119,227 @@ export default function AllSightings() {
     fetchAllSightings();
   }, []);
 
+  // ✅ FIXED: Enhanced deduplication function to handle similar sightings
+  const deduplicateSightings = (sightings: Sighting[]): Sighting[] => {
+    const seenCombinations = new Map<string, Sighting>();
+    const uniqueSightings: Sighting[] = [];
+
+    sightings.forEach(sighting => {
+      // Create a unique key based on multiple properties to identify duplicates
+      const key = `${sighting.species}-${sighting.user_id}-${new Date(sighting.created_at).getTime()}-${sighting.detection_type}`;
+      
+      // If we haven't seen this combination, add it
+      if (!seenCombinations.has(key)) {
+        seenCombinations.set(key, sighting);
+        uniqueSightings.push(sighting);
+      } else {
+        // If we have seen it, keep the one with higher confidence or manual report
+        const existing = seenCombinations.get(key)!;
+        
+        // Prefer manual reports over automated ones
+        if (sighting.is_manual_report && !existing.is_manual_report) {
+          // Replace automated with manual
+          const index = uniqueSightings.findIndex(s => s.id === existing.id);
+          if (index !== -1) {
+            uniqueSightings[index] = sighting;
+            seenCombinations.set(key, sighting);
+          }
+        }
+        // If both are same type, keep the one with higher confidence
+        else if (sighting.confidence > existing.confidence) {
+          const index = uniqueSightings.findIndex(s => s.id === existing.id);
+          if (index !== -1) {
+            uniqueSightings[index] = sighting;
+            seenCombinations.set(key, sighting);
+          }
+        }
+        
+        console.warn(`⚠️ Potential duplicate detected and handled:`, {
+          species: sighting.species,
+          timestamp: sighting.created_at,
+          user: sighting.username,
+          type: sighting.detection_type,
+          confidence: sighting.confidence,
+          existingConfidence: existing.confidence
+        });
+      }
+    });
+
+    return uniqueSightings;
+  };
+
+  // ✅ FIXED: Alternative deduplication for cases where timestamps are exactly the same
+  const advancedDeduplicateSightings = (sightings: Sighting[]): Sighting[] => {
+    const groups = new Map<string, Sighting[]>();
+    
+    // Group sightings by species, user, and timestamp (within 2 minute window)
+    sightings.forEach(sighting => {
+      const timestamp = new Date(sighting.created_at).getTime();
+      const timeWindow = Math.floor(timestamp / (2 * 60 * 1000)); // 2-minute windows
+      const groupKey = `${sighting.species}-${sighting.user_id}-${timeWindow}-${sighting.detection_type}`;
+      
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, []);
+      }
+      groups.get(groupKey)!.push(sighting);
+    });
+
+    const uniqueSightings: Sighting[] = [];
+    
+    // For each group, select the best candidate
+    groups.forEach((groupSightings, groupKey) => {
+      if (groupSightings.length === 1) {
+        uniqueSightings.push(groupSightings[0]);
+      } else {
+        console.log(`🔍 Group ${groupKey} has ${groupSightings.length} similar sightings:`, 
+          groupSightings.map(s => ({
+            id: s.id,
+            confidence: s.confidence,
+            is_manual: s.is_manual_report,
+            timestamp: s.created_at
+          }))
+        );
+
+        // Sort by: 1) manual reports first, 2) higher confidence, 3) most recent
+        groupSightings.sort((a, b) => {
+          // Manual reports take priority
+          if (a.is_manual_report && !b.is_manual_report) return -1;
+          if (!a.is_manual_report && b.is_manual_report) return 1;
+          
+          // Then by confidence
+          if (a.confidence !== b.confidence) return b.confidence - a.confidence;
+          
+          // Then by most recent
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
+
+        // Take the best one
+        const bestSighting = groupSightings[0];
+        uniqueSightings.push(bestSighting);
+        
+        // Log the removed duplicates
+        if (groupSightings.length > 1) {
+          console.log(`✅ Kept sighting ID ${bestSighting.id}, removed ${groupSightings.length - 1} duplicates from group`);
+        }
+      }
+    });
+
+    return uniqueSightings;
+  };
+
+  // ✅ FIXED: Updated fetch function to use correct endpoints
   const fetchAllSightings = async () => {
     try {
       setLoading(true);
       console.log('🔄 Fetching complete sightings database...');
       
-      // ✅ FIXED: Use API_URL constant for both fetch calls
+      // ✅ FIXED: Use the correct endpoints that exist in your backend
       const [reportsResponse, sightingsResponse] = await Promise.all([
-        fetch(`${API_URL}/api/user-reports`),
-        fetch(`${API_URL}/api/sightings`)
+        fetch(`${API_URL}/api/user-reports`), // This endpoint exists
+        fetch(`${API_URL}/api/sightings`)     // This endpoint exists in your backend
       ]);
+
+      // ✅ FIXED: Better error handling for failed requests
+      if (!reportsResponse.ok) {
+        console.error('❌ Failed to fetch user reports:', reportsResponse.status, reportsResponse.statusText);
+        throw new Error(`Failed to fetch user reports: ${reportsResponse.status}`);
+      }
+
+      if (!sightingsResponse.ok) {
+        console.error('❌ Failed to fetch automated sightings:', sightingsResponse.status, sightingsResponse.statusText);
+        throw new Error(`Failed to fetch automated sightings: ${sightingsResponse.status}`);
+      }
 
       let allSightings: Sighting[] = [];
 
       // Process user reports
-      if (reportsResponse.ok) {
-        const reportsData = await reportsResponse.json();
-        if (reportsData.reports && Array.isArray(reportsData.reports)) {
-          const transformedReports = reportsData.reports.map((report: any) => ({
-            id: report.id,
-            user_id: report.user_id,
-            username: report.user_name,
-            email: report.user_email,
-            species: report.species || 'Unknown Species',
-            confidence: report.confidence || 0,
-            condition: report.condition || 'Unknown',
-            condition_confidence: report.condition_confidence || 0,
-            detection_type: report.detection_type || 'manual_report',
-            image_path: report.image_path,
-            video_path: report.video_path || null,
-            location_lat: report.location_lat,
-            location_lng: report.location_lng,
-            created_at: report.created_at,
-            updated_at: report.updated_at,
-            conservation_status: report.conservation_status,
-            habitat: report.habitat,
-            population: report.population,
-            recommended_care: report.recommended_care,
-            admin_notes: report.admin_notes,
-            status: report.status || 'pending',
-            is_manual_report: true,
-            title: report.title,
-            description: report.description,
-            report_type: report.report_type
-          }));
-          allSightings = [...allSightings, ...transformedReports];
-        }
+      const reportsData = await reportsResponse.json();
+      if (reportsData.reports && Array.isArray(reportsData.reports)) {
+        const transformedReports = reportsData.reports.map((report: any) => ({
+          id: report.id,
+          user_id: report.user_id,
+          username: report.user_name,
+          email: report.user_email,
+          species: report.species || 'Unknown Species',
+          confidence: report.confidence || 0,
+          condition: report.condition || 'Unknown',
+          condition_confidence: report.condition_confidence || 0,
+          detection_type: report.detection_type || 'manual_report',
+          image_path: report.image_path,
+          video_path: report.video_path || null,
+          location_lat: report.location_lat,
+          location_lng: report.location_lng,
+          created_at: report.created_at,
+          updated_at: report.updated_at,
+          conservation_status: report.conservation_status,
+          habitat: report.habitat,
+          population: report.population,
+          recommended_care: report.recommended_care,
+          admin_notes: report.admin_notes,
+          status: report.status || 'pending',
+          is_manual_report: true,
+          title: report.title,
+          description: report.description,
+          report_type: report.report_type
+        }));
+        allSightings = [...allSightings, ...transformedReports];
+        console.log(`📝 Loaded ${transformedReports.length} manual reports`);
       }
 
-      // Process automated sightings - FIXED: Remove the ID offset
-      if (sightingsResponse.ok) {
-        const sightingsData = await sightingsResponse.json();
-        if (sightingsData.sightings && Array.isArray(sightingsData.sightings)) {
-          const transformedSightings = sightingsData.sightings.map((sighting: any) => ({
-            id: sighting.id, // ✅ FIXED: Use actual database ID instead of +100000
-            user_id: sighting.user_id || 0,
-            username: sighting.user?.username || 'System',
-            email: sighting.user?.email || 'system@wildlife.com',
-            species: sighting.species,
-            confidence: sighting.confidence,
-            condition: sighting.condition || 'Unknown',
-            condition_confidence: sighting.condition_confidence || 0,
-            detection_type: sighting.detection_type,
-            image_path: sighting.image_path,
-            video_path: sighting.video_path || null,
-            location_lat: sighting.location_lat,
-            location_lng: sighting.location_lng,
-            created_at: sighting.created_at,
-            updated_at: sighting.updated_at || sighting.created_at,
-            conservation_status: sighting.conservation_status,
-            habitat: sighting.habitat,
-            population: sighting.population,
-            recommended_care: sighting.recommended_care,
-            admin_notes: sighting.admin_notes,
-            status: sighting.status || 'pending',
-            is_manual_report: false,
-            title: `Automated Detection: ${sighting.species}`,
-            description: `Automated ${sighting.detection_type} detection of ${sighting.species} with ${(sighting.confidence * 100).toFixed(1)}% confidence`,
-            report_type: 'sighting'
-          }));
-          allSightings = [...allSightings, ...transformedSightings];
-        }
+      // Process automated sightings
+      const sightingsData = await sightingsResponse.json();
+      if (sightingsData.sightings && Array.isArray(sightingsData.sightings)) {
+        const transformedSightings = sightingsData.sightings.map((sighting: any) => ({
+          id: sighting.id,
+          user_id: sighting.user_id || 0,
+          username: sighting.user?.username || 'System',
+          email: sighting.user?.email || 'system@wildlife.com',
+          species: sighting.species,
+          confidence: sighting.confidence,
+          condition: sighting.condition || 'Unknown',
+          condition_confidence: sighting.condition_confidence || 0,
+          detection_type: sighting.detection_type,
+          image_path: sighting.image_path,
+          video_path: sighting.video_path || null,
+          location_lat: sighting.location_lat,
+          location_lng: sighting.location_lng,
+          created_at: sighting.created_at,
+          updated_at: sighting.updated_at || sighting.created_at,
+          conservation_status: sighting.conservation_status,
+          habitat: sighting.habitat,
+          population: sighting.population,
+          recommended_care: sighting.recommended_care,
+          admin_notes: sighting.admin_notes,
+          status: sighting.status || 'pending',
+          is_manual_report: false,
+          title: `Automated Detection: ${sighting.species}`,
+          description: `Automated ${sighting.detection_type} detection of ${sighting.species} with ${(sighting.confidence * 100).toFixed(1)}% confidence`,
+          report_type: 'sighting'
+        }));
+        allSightings = [...allSightings, ...transformedSightings];
+        console.log(`🤖 Loaded ${transformedSightings.length} automated sightings`);
+      }
+
+      // ✅ FIXED: Use advanced deduplication to handle similar sightings
+      console.log(`📊 Total sightings before deduplication: ${allSightings.length}`);
+      const uniqueSightings = advancedDeduplicateSightings(allSightings);
+      console.log(`📊 Total sightings after deduplication: ${uniqueSightings.length}`);
+      
+      if (allSightings.length !== uniqueSightings.length) {
+        console.log(`🚫 Removed ${allSightings.length - uniqueSightings.length} duplicate sightings`);
+        
+        // Log details about what was removed
+        const removedCount = allSightings.length - uniqueSightings.length;
+        const manualReports = uniqueSightings.filter(s => s.is_manual_report).length;
+        const automatedSightings = uniqueSightings.filter(s => !s.is_manual_report).length;
+        
+        console.log(`📈 Final breakdown: ${manualReports} manual reports, ${automatedSightings} automated sightings`);
       }
 
       // Group sightings by user
       const usersMap = new Map<number, User>();
       
-      allSightings.forEach(sighting => {
+      uniqueSightings.forEach(sighting => {
         if (!usersMap.has(sighting.user_id)) {
           usersMap.set(sighting.user_id, {
             id: sighting.user_id,
@@ -234,7 +369,9 @@ export default function AllSightings() {
       calculateStats(usersArray);
       setSelectedSightings(new Set()); // Reset selections when data reloads
     } catch (error) {
-      console.error('Error fetching complete sightings database:', error);
+      console.error('❌ Error fetching complete sightings database:', error);
+      // Show user-friendly error message
+      alert('Failed to load sightings data. Please check if the backend server is running.');
       setUsers([]);
       calculateStats([]);
     } finally {
@@ -448,7 +585,7 @@ export default function AllSightings() {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Error exporting CSV:', error);
+      console.error('❌ Error exporting CSV:', error);
       alert('Error exporting data. Please try again.');
     } finally {
       setExportLoading(false);
@@ -467,7 +604,7 @@ export default function AllSightings() {
     exportToCSV(selectedSightingsList);
   };
 
-  // Delete functions - FIXED VERSION
+  // Delete functions
   const deleteSighting = async (sightingId: number) => {
     try {
       setDeleteLoading(sightingId);
@@ -516,7 +653,7 @@ export default function AllSightings() {
         throw new Error(`Failed to delete sighting: ${response.status} ${errorText}`);
       }
     } catch (error) {
-      console.error('Error deleting sighting:', error);
+      console.error('❌ Error deleting sighting:', error);
       alert('Error deleting sighting. Please try again.');
     } finally {
       setDeleteLoading(null);
@@ -551,7 +688,7 @@ export default function AllSightings() {
         alert(`Deleted ${successfulDeletes} out of ${selectedSightings.size} selected sightings.`);
       }
     } catch (error) {
-      console.error('Error deleting selected sightings:', error);
+      console.error('❌ Error deleting selected sightings:', error);
       alert('Error deleting sightings. Please try again.');
     } finally {
       setBulkDeleteLoading(false);
